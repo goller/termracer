@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"unicode"
 
 	"github.com/jan25/gocui"
 )
@@ -17,10 +17,12 @@ type Paragraph struct {
 	x, y int
 	w, h int
 
+	paragraph string
+
 	// done channel
 	done chan struct{}
-	// words in pargraph
-	words []string
+	// words in paragraph
+	words []span
 	// index of current word being typed
 	wordi int
 	// whether current word is mistyped
@@ -64,13 +66,14 @@ func (p *Paragraph) Layout(g *gocui.Gui) error {
 func (p *Paragraph) Init() {
 	p.done = make(chan struct{})
 
-	para, err := ChooseParagraph()
+	var err error
+	p.paragraph, err = ChooseParagraph()
 	if err != nil {
 		Logger.Error(fmt.Sprintf("%v", err))
 		return
 	}
 
-	p.words = strings.Fields(para)
+	p.words = fieldsFunc(p.paragraph, unicode.IsSpace)
 	p.wordi = 0
 }
 
@@ -92,7 +95,8 @@ func (p *Paragraph) CountDoneWords() int {
 
 // CurrentWord returns target word to type
 func (p *Paragraph) CurrentWord() string {
-	return p.words[p.wordi]
+	span := p.words[p.wordi]
+	return p.paragraph[span.start:span.end]
 }
 
 // CharsUptoCurrent counts chars in words
@@ -100,7 +104,8 @@ func (p *Paragraph) CurrentWord() string {
 func (p *Paragraph) CharsUptoCurrent() int {
 	c := 0
 	for i := 0; i < p.wordi; i++ {
-		c += len(p.words[i])
+		span := p.words[i]
+		c += span.end - span.start
 	}
 	return c
 }
@@ -108,28 +113,19 @@ func (p *Paragraph) CharsUptoCurrent() int {
 // DrawView renders the paragraph View
 func (p *Paragraph) DrawView(v *gocui.View) {
 	v.Clear()
-
-	for i, w := range p.words {
-		highlight := false
-		if i == p.wordi {
-			highlight = true
-		}
-
-		p.printWord(v, w, highlight)
+	if len(p.words) == 0 {
+		return
 	}
-}
 
-func (p *Paragraph) printWord(v *gocui.View, w string, highlight bool) {
-	f := "%s "
-	if highlight {
-		// Green bg
-		f = "\033[32;7m%s\033[0m "
-		if p.Mistyped {
-			// Red/pink bg
-			f = "\033[31;7m%s\033[0m "
-		}
+	colorized := "\033[32;7m%s\033[0m"
+	if p.Mistyped {
+		// Red/pink bg
+		colorized = "\033[31;7m%s\033[0m"
 	}
-	fmt.Fprintf(v, f, w)
+	span := p.words[p.wordi]
+	colorized = fmt.Sprintf(colorized, p.paragraph[span.start:span.end])
+
+	fmt.Fprintf(v, "%s%s%s", p.paragraph[:span.start], colorized, p.paragraph[span.end:])
 }
 
 func (p *Paragraph) getDoneCh() chan struct{} {
@@ -149,4 +145,40 @@ func (p *Paragraph) Reset() {
 	default:
 		close(p.getDoneCh())
 	}
+}
+
+// A span is used to record a slice of s of the form s[start:end].
+// The start index is inclusive and the end index is exclusive.
+type span struct {
+	start int
+	end   int
+}
+
+func fieldsFunc(s string, f func(rune) bool) []span {
+	spans := make([]span, 0, 32)
+
+	// Find the field start and end indices.
+	wasField := false
+	fromIndex := 0
+
+	for i, rune := range s {
+		if f(rune) {
+			if wasField {
+				spans = append(spans, span{start: fromIndex, end: i})
+				wasField = false
+			}
+		} else {
+			if !wasField {
+				fromIndex = i
+				wasField = true
+			}
+		}
+	}
+
+	// Last field might end at EOF.
+	if wasField {
+		spans = append(spans, span{fromIndex, len(s)})
+	}
+
+	return spans
 }

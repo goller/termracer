@@ -4,9 +4,10 @@ import (
 	"strings"
 
 	"github.com/jan25/gocui"
+	"go.uber.org/zap"
 )
 
-const maxWordLen int = 15
+const maxWordLen int = 100
 
 // Word is a widget to type
 // a target word
@@ -89,7 +90,7 @@ func (w *Word) init(v *gocui.View) {
 	v.Editor = w.e
 	v.Editable = true
 	v.SelBgColor = gocui.ColorRed
-	v.SelFgColor = gocui.ColorCyan
+	v.SelFgColor = gocui.ColorBlack
 }
 
 func newWordEditor() gocui.Editor {
@@ -97,7 +98,9 @@ func newWordEditor() gocui.Editor {
 }
 
 func wordEditorFunc(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
-	word := strings.TrimSpace(getCurrentWord(v))
+	word := getCurrentWord(v)
+	word = strings.TrimSpace(word)
+	Logger.Info("in editor", zap.String("word", word))
 
 	switch {
 	case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
@@ -109,8 +112,8 @@ func wordEditorFunc(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 		// can only delete from here
 	case ch != 0 && mod == 0:
 		handleChar(v, ch)
-	case key == gocui.KeySpace:
-		handleSpace(v)
+	case key == gocui.KeySpace || key == gocui.KeyEnter:
+		handleSpace(word, v)
 	}
 }
 
@@ -133,9 +136,12 @@ func checkAndHighlight(v *gocui.View) {
 	}
 }
 
-func handleSpace(v *gocui.View) {
-	w := strings.TrimSpace(getCurrentWord(v))
-	if w == paragraph.CurrentWord() {
+func handleSpace(w string, v *gocui.View) {
+	p := paragraph.CurrentWord()
+	p = strings.TrimSpace(p)
+	Logger.Info("hadling space", zap.String("paragraph", p))
+
+	if w == p {
 		clearEditor(v)
 
 		perr := paragraph.Advance()

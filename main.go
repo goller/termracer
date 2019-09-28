@@ -27,8 +27,8 @@ var (
 )
 
 var (
-	paraW, paraH = 60, 8
-	wordW, wordH = 60, 2
+	paraW, paraH = 100, 15
+	wordW, wordH = 100, 15
 
 	statsW, statsH       = 20, 6
 	controlsW, controlsH = 20, 4

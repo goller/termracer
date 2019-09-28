@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jan25/termracer/server/client"
+	"go.uber.org/zap"
 )
 
 // CreateFileIfNotExists creates file if not exists
@@ -96,6 +97,7 @@ func ChooseParagraph() (string, error) {
 		// returning const paragraph if couldn't reach server
 		return firstParagraph, nil
 	}
+	Logger.Info("received", zap.String("paragraph", p))
 	return p, nil
 }
 
